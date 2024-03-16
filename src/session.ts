@@ -5,7 +5,7 @@ import type { SessionOptions } from "express-session";
 import { NextFunction, Request, Response } from "express";
 import cookie from "cookie";
 
-// FIXME: In the future this types will need to come from Keystone itself.
+// FIXME: In the future this types will need to come from OcopJS itself.
 type _Item = { id: string };
 type _List = {
   key: string;
@@ -13,7 +13,7 @@ type _List = {
     itemsQuery: (args: { where: { id: string } }) => Promise<_Item[]>;
   };
 };
-type _Keystone = { lists: Record<string, _List> };
+type _OcopJS = { lists: Record<string, _List> };
 
 export class SessionManager {
   _cookieSecret: SessionOptions["secret"];
@@ -32,11 +32,11 @@ export class SessionManager {
     if (!cookieSecret) {
       if (process.env.NODE_ENV === "production") {
         throw new Error(
-          "The cookieSecret config option is required when running Keystone in a production environment. Update your app or environment config so this value is supplied to the Keystone constructor. See [https://www.keystonejs.com/keystonejs/keystone/#cookiesecret] for details.",
+          "The cookieSecret config option is required when running OcopJS in a production environment. Update your app or environment config so this value is supplied to the OcopJS constructor.",
         );
       } else {
         console.warn(
-          "No cookieSecret value was provided. Please generate a secure value and add it to your app. Until this is done, a random cookieSecret will be generated each time Keystone is started. This will cause sessions to be reset between restarts. See [https://www.keystonejs.com/keystonejs/keystone/#cookiesecret] for details.",
+          "\n 🚧 No cookieSecret value was provided. Please generate a secure value and add it to your app. Until this is done, a random cookieSecret will be generated each time OcopJS is started. This will cause sessions to be reset between restarts.",
         );
 
         cookieSecret = [...Array(30)]
@@ -47,11 +47,11 @@ export class SessionManager {
 
     this._cookieSecret = cookieSecret;
     this._cookie = cookie;
-    this._sessionStore = sessionStore;
+    if (sessionStore) this._sessionStore = sessionStore;
   }
 
-  getSessionMiddleware({ keystone }: { keystone: _Keystone }) {
-    const COOKIE_NAME = "keystone.sid";
+  getSessionMiddleware({ ocop }: { ocop: _OcopJS }) {
+    const COOKIE_NAME = "ocop.sid";
 
     // We have at least one auth strategy
     // Setup the session as the very first thing.
@@ -101,28 +101,29 @@ export class SessionManager {
       next();
     };
 
-    const sessionMiddleware = expressSession({
+    const opts = {
       secret: this._cookieSecret,
       resave: false,
       saveUninitialized: false,
       name: COOKIE_NAME,
       cookie: this._cookie,
       store: this._sessionStore,
-    });
+    };
+    const sessionMiddleware = expressSession(opts);
 
     const _populateAuthedItemMiddleware = async (
       req: Request,
       res: Response,
       next: NextFunction,
     ) => {
-      const item = await this._getAuthedItem(req, keystone);
+      const item = await this._getAuthedItem(req, ocop);
       if (!item) {
         // TODO: probably destroy the session
         return next();
       }
 
       (req as any).user = item;
-      (req as any).authedListKey = (req.session as any).keystoneListKey;
+      (req as any).authedListKey = (req.session as any).ocopListKey;
 
       next();
     };
@@ -134,19 +135,19 @@ export class SessionManager {
     ];
   }
 
-  async _getAuthedItem(req: Request, keystone: _Keystone) {
+  async _getAuthedItem(req: Request, ocop: _OcopJS) {
     const session = req.session as any;
-    if (!session || !session.keystoneItemId) {
+    if (!session || !session.ocopItemId) {
       return;
     }
-    const list = keystone.lists[session.keystoneListKey];
+    const list = ocop.lists[session.ocopListKey];
     if (!list) {
       return;
     }
     let item: _Item | undefined;
     try {
       item = (
-        await list.adapter.itemsQuery({ where: { id: session.keystoneItemId } })
+        await list.adapter.itemsQuery({ where: { id: session.ocopItemId } })
       )[0];
     } catch (e) {
       return;
@@ -164,26 +165,26 @@ export class SessionManager {
     return new Promise((resolve, reject) =>
       req.session.regenerate((err: any) => {
         if (err) return reject(err);
-        (req.session as any).keystoneListKey = list.key;
-        (req.session as any).keystoneItemId = item.id;
+        (req.session as any).ocopListKey = list.key;
+        (req.session as any).ocopItemId = item.id;
         resolve(cookieSignature.sign(req.session.id, this._cookieSecret));
-      })
+      }),
     );
   }
 
   endAuthedSession(
     req: Request,
   ): Promise<{ success: boolean; listKey: string; itemId: string }> {
-    const { keystoneListKey, keystoneItemId } = (req.session as any) || {};
+    const { ocopListKey, ocopItemId } = (req.session as any) || {};
     return new Promise((resolve, reject) =>
       req.session.regenerate((err: any) => {
         if (err) return reject(err);
         resolve({
           success: true,
-          listKey: keystoneListKey,
-          itemId: keystoneItemId,
+          listKey: ocopListKey,
+          itemId: ocopItemId,
         });
-      })
+      }),
     );
   }
 
