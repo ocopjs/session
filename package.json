@@ -1,7 +1,7 @@
 {
   "name": "@ocopjs/session",
   "description": "OcopJS - Quản lý và thiết lập session cho hệ thống. 🇻🇳",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "ocopjs",
   "scripts": {
     "format": "prettier --write \"**/*.{ts,tsx,md,js}\"",
